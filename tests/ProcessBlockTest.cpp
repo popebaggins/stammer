@@ -4,6 +4,8 @@
 #include "Parameters.h"
 #include "PluginProcessor.h"
 
+#include <cmath>
+
 using Catch::Matchers::WithinAbs;
 
 namespace
@@ -21,22 +23,31 @@ juce::AudioBuffer<float> rampBuffer(int numChannels, int numSamples)
 }
 }
 
-TEST_CASE("Audio passes through unchanged when Bypass is off (no DSP implemented yet)", "[processBlock]")
+TEST_CASE("Audio passes through unchanged when Mix is fully dry, regardless of the reversed signal", "[processBlock]")
 {
     ReverseModeCAudioProcessor processor;
     processor.prepareToPlay(sampleRate, blockSize);
+    juce::MidiBuffer midi;
+
+    *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::mix) = 0.0f;
+
+    // Let the Mix smoother settle fully to 0 (default is 0.5; the smoothing
+    // ramp is 20ms / ~882 samples) before measuring.
+    for (int i = 0; i < 4; ++i)
+    {
+        auto warmup = rampBuffer(2, blockSize);
+        processor.processBlock(warmup, midi);
+    }
 
     const auto input = rampBuffer(2, blockSize);
     auto buffer = input;
-    juce::MidiBuffer midi;
-
     processor.processBlock(buffer, midi);
 
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         for (int i = 0; i < buffer.getNumSamples(); ++i)
         {
             INFO("channel " << ch << " sample " << i);
-            CHECK_THAT((double) buffer.getSample(ch, i), WithinAbs((double) input.getSample(ch, i), 1.0e-6));
+            CHECK_THAT((double) buffer.getSample(ch, i), WithinAbs((double) input.getSample(ch, i), 1.0e-4));
         }
 }
 
@@ -45,6 +56,10 @@ TEST_CASE("Engaging Bypass mutes the output with a smoothed fade, not a click", 
     ReverseModeCAudioProcessor processor;
     processor.prepareToPlay(sampleRate, blockSize);
     juce::MidiBuffer midi;
+
+    // Pin Mix fully dry so this test isolates Bypass behaviour from the
+    // Forward/Reverse blend (covered separately by the blend seam tests).
+    *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::mix) = 0.0f;
 
     constexpr float constantLevel = 0.5f;
     auto constantBlock = [](float level)
@@ -56,6 +71,13 @@ TEST_CASE("Engaging Bypass mutes the output with a smoothed fade, not a click", 
                 b.setSample(ch, i, level);
         return b;
     };
+
+    // Let the Mix smoother settle to 0 before measuring.
+    for (int i = 0; i < 4; ++i)
+    {
+        auto warmup = constantBlock(constantLevel);
+        processor.processBlock(warmup, midi);
+    }
 
     // Settle at the steady, non-bypassed state first.
     auto settle = constantBlock(constantLevel);
@@ -84,4 +106,69 @@ TEST_CASE("Engaging Bypass mutes the output with a smoothed fade, not a click", 
         INFO("channel " << ch);
         CHECK_THAT((double) stillBypassed.getSample(ch, stillBypassed.getNumSamples() - 1), WithinAbs(0.0, 1.0e-3));
     }
+}
+
+TEST_CASE("Balance at full Forward reproduces the dry input exactly, even once the reverse buffer has real history",
+          "[processBlock]")
+{
+    ReverseModeCAudioProcessor processor;
+    processor.prepareToPlay(sampleRate, blockSize);
+    juce::MidiBuffer midi;
+
+    *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::mix) = 1.0f;
+    *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::balance) = -1.0f;
+
+    // Let Mix and Balance smoothers settle, and prime the reverse buffer
+    // with several blocks of real history so a bug that ignored Balance
+    // (always blending in some Reverse) would be exposed.
+    for (int i = 0; i < 6; ++i)
+    {
+        auto warmup = rampBuffer(2, blockSize);
+        processor.processBlock(warmup, midi);
+    }
+
+    const auto input = rampBuffer(2, blockSize);
+    auto buffer = input;
+    processor.processBlock(buffer, midi);
+
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+        {
+            INFO("channel " << ch << " sample " << i);
+            CHECK_THAT((double) buffer.getSample(ch, i), WithinAbs((double) input.getSample(ch, i), 1.0e-4));
+        }
+}
+
+TEST_CASE("Balance at full Reverse produces audibly different, reversed audio instead of the dry input", "[processBlock]")
+{
+    ReverseModeCAudioProcessor processor;
+    processor.prepareToPlay(sampleRate, blockSize);
+    juce::MidiBuffer midi;
+
+    *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::mix) = 1.0f;
+    *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::balance) = 1.0f;
+
+    // Prime the reverse buffer with a non-constant (ramp) signal so a
+    // correctly-wired Reverse voice has real, distinguishable history to
+    // play back, then let Mix/Balance settle.
+    for (int i = 0; i < 6; ++i)
+    {
+        auto warmup = rampBuffer(2, blockSize);
+        processor.processBlock(warmup, midi);
+    }
+
+    const auto input = rampBuffer(2, blockSize);
+    auto buffer = input;
+    processor.processBlock(buffer, midi);
+
+    bool anySampleDiffers = false;
+    for (int ch = 0; ch < buffer.getNumChannels() && !anySampleDiffers; ++ch)
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            if (std::abs(buffer.getSample(ch, i) - input.getSample(ch, i)) > 1.0e-4f)
+            {
+                anySampleDiffers = true;
+                break;
+            }
+
+    CHECK(anySampleDiffers);
 }

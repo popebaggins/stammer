@@ -36,6 +36,7 @@ juce_add_plugin(ReverseModeC
 target_sources(ReverseModeC
     PRIVATE
         Source/Parameters.cpp
+        Source/ReverseBuffer.cpp
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
         Source/PluginMain.cpp)
