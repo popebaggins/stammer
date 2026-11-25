@@ -4,34 +4,21 @@
 
 #include <cmath>
 
-namespace
-{
-// Buffer Length preset index (0/1/2, matching ReverseModeC::bufferLengthChoices
-// "1s"/"2s"/"4s") to the grain/window length in seconds.
-constexpr float bufferLengthSecondsByIndex[] = { 1.0f, 2.0f, 4.0f };
-
-float bufferLengthSecondsForRawValue(float rawChoiceValue)
-{
-    constexpr auto numChoices = (int) (sizeof(bufferLengthSecondsByIndex) / sizeof(bufferLengthSecondsByIndex[0]));
-    const auto index = juce::jlimit(0, numChoices - 1, (int) std::lround(rawChoiceValue));
-    return bufferLengthSecondsByIndex[index];
-}
-}
-
 ReverseModeCAudioProcessor::ReverseModeCAudioProcessor()
     : AudioProcessor(BusesProperties()
                          .withInput("Input", juce::AudioChannelSet::stereo(), true)
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true))
 {
     bypassParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::bypass);
-    bufferLengthParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::bufferLength);
+    timeParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::time);
     mixParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::mix);
     balanceParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::balance);
 
     for (const auto& id : ReverseModeC::smoothedParamIDs)
     {
         smoothedParamSources[id] = apvts.getRawParameterValue(id);
-        if (id != ReverseModeC::ParamIDs::mix && id != ReverseModeC::ParamIDs::balance)
+        if (id != ReverseModeC::ParamIDs::mix && id != ReverseModeC::ParamIDs::balance
+            && id != ReverseModeC::ParamIDs::time)
             blockWiseSmoothedParamIDs.push_back(id);
     }
 }
@@ -49,10 +36,11 @@ void ReverseModeCAudioProcessor::prepareToPlay(double sampleRate, int)
     }
 
     reverseBuffer.prepare(sampleRate);
-    reverseBuffer.setGrainLengthSeconds(bufferLengthSecondsForRawValue(*bufferLengthParam));
+    reverseBuffer.setGrainLengthSeconds(*timeParam);
 
     mixSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::mix);
     balanceSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::balance);
+    timeSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::time);
 }
 
 float ReverseModeCAudioProcessor::getSmoothedParameterValue(const juce::String& paramID) const
@@ -73,12 +61,12 @@ bool ReverseModeCAudioProcessor::isBusesLayoutSupported(const BusesLayout& layou
 void ReverseModeCAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     bypassGain.setTargetValue(*bypassParam > 0.5f ? 0.0f : 1.0f);
-    reverseBuffer.setGrainLengthSeconds(bufferLengthSecondsForRawValue(*bufferLengthParam));
 
     const auto numSamples = buffer.getNumSamples();
 
     mixSmoothed->setTargetValue(*mixParam);
     balanceSmoothed->setTargetValue(*balanceParam);
+    timeSmoothed->setTargetValue(*timeParam);
 
     // The remaining smoothed params have no per-sample DSP consuming them
     // yet, so advance each of those once per block rather than
@@ -98,6 +86,8 @@ void ReverseModeCAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, 
     {
         const auto forwardL = left[i];
         const auto forwardR = right[i];
+
+        reverseBuffer.setGrainLengthSeconds(timeSmoothed->getNextValue());
 
         float reverseL, reverseR, octaveUpL, octaveUpR;
         reverseBuffer.processSample(forwardL, forwardR, reverseL, reverseR, &octaveUpL, &octaveUpR);

@@ -23,11 +23,8 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
     };
 
-    SliderWithAttachment mixSlider, feedbackSlider, balanceSlider, filterSlider, modDepthSlider, modRateSlider;
-
-    juce::ComboBox bufferLengthBox;
-    juce::Label bufferLengthLabel;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> bufferLengthAttachment;
+    SliderWithAttachment mixSlider, timeSlider, feedbackSlider, balanceSlider, filterSlider, modDepthSlider,
+        modRateSlider;
 
     juce::ToggleButton modSyncButton { "Mod Sync" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> modSyncAttachment;

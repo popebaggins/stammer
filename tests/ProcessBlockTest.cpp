@@ -179,7 +179,7 @@ TEST_CASE("Balance at centre (pure Reverse) produces audibly different, reversed
 
 namespace
 {
-// A low sample rate so the "1s" Buffer Length preset (set explicitly below)
+// A low sample rate so the Time value set explicitly below (1.0s)
 // resolves to a short, fast-to-fill 1000-sample grain. At the default 44.1kHz
 // a grain is tens of thousands of samples, far longer than a few blocks of
 // warmup can fill with real signal -- both the Reverse voice (reads back up
@@ -201,7 +201,7 @@ juce::AudioBuffer<float> capturedOutputAtBalance(float balance)
     processor.prepareToPlay(octaveTestSampleRate, blockSize);
     juce::MidiBuffer midi;
 
-    *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::bufferLength) = 0.0f; // "1s" -> 1000-sample grain
+    *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::time) = 1.0f; // 1000-sample grain
     *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::mix) = 1.0f;
     *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::balance) = balance;
 

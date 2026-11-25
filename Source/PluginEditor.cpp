@@ -22,19 +22,12 @@ ReverseModeCAudioProcessorEditor::ReverseModeCAudioProcessorEditor(ReverseModeCA
     };
 
     setUpSlider(mixSlider, ReverseModeC::ParamIDs::mix, "Mix");
+    setUpSlider(timeSlider, ReverseModeC::ParamIDs::time, "Time");
     setUpSlider(feedbackSlider, ReverseModeC::ParamIDs::feedback, "Feedback");
     setUpSlider(balanceSlider, ReverseModeC::ParamIDs::balance, "Balance");
     setUpSlider(filterSlider, ReverseModeC::ParamIDs::filter, "Filter");
     setUpSlider(modDepthSlider, ReverseModeC::ParamIDs::modDepth, "Mod Depth");
     setUpSlider(modRateSlider, ReverseModeC::ParamIDs::modRate, "Mod Rate");
-
-    bufferLengthBox.addItemList(ReverseModeC::bufferLengthChoices, 1);
-    addAndMakeVisible(bufferLengthBox);
-    bufferLengthLabel.setText("Buffer Length", juce::dontSendNotification);
-    bufferLengthLabel.attachToComponent(&bufferLengthBox, false);
-    addAndMakeVisible(bufferLengthLabel);
-    bufferLengthAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
-        processor.apvts, ReverseModeC::ParamIDs::bufferLength, bufferLengthBox);
 
     addAndMakeVisible(modSyncButton);
     modSyncAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
@@ -53,12 +46,12 @@ void ReverseModeCAudioProcessorEditor::resized()
     area.removeFromTop(20); // room for the attached labels above each control
 
     auto knobRow = area.removeFromTop(sliderHeight);
-    for (auto* s : { &mixSlider, &feedbackSlider, &balanceSlider, &filterSlider, &modDepthSlider, &modRateSlider })
+    for (auto* s :
+         { &mixSlider, &timeSlider, &feedbackSlider, &balanceSlider, &filterSlider, &modDepthSlider, &modRateSlider })
         s->slider.setBounds(knobRow.removeFromLeft(sliderWidth));
 
     area.removeFromTop(20);
     auto toggleRow = area.removeFromTop(rowHeight - 20);
-    bufferLengthBox.setBounds(toggleRow.removeFromLeft(sliderWidth).withHeight(24));
     modSyncButton.setBounds(toggleRow.removeFromLeft(sliderWidth).withHeight(24));
     bypassButton.setBounds(toggleRow.removeFromLeft(sliderWidth).withHeight(24));
 }
