@@ -2,7 +2,11 @@ add_executable(reverse_mode_c_tests
     ParameterLayoutTest.cpp
     ProcessBlockTest.cpp
     SmoothingTest.cpp
+    ReverseBufferTest.cpp
+    BlendTest.cpp
+    BufferLengthTest.cpp
     ${CMAKE_SOURCE_DIR}/Source/Parameters.cpp
+    ${CMAKE_SOURCE_DIR}/Source/ReverseBuffer.cpp
     ${CMAKE_SOURCE_DIR}/Source/PluginProcessor.cpp
     ${CMAKE_SOURCE_DIR}/Source/PluginEditor.cpp)
 
