@@ -46,17 +46,17 @@ public:
 
     // The reverse reader's current grain/window length, in samples, as of
     // the last processBlock call. Exposed publicly so tests can confirm the
-    // Buffer Length preset (1s/2s/4s) reaches the DSP without reallocation.
+    // Time control reaches the DSP without reallocation.
     int getActiveGrainLengthSamples() const { return reverseBuffer.getGrainLengthSamples(); }
 
 private:
     std::map<juce::String, juce::SmoothedValue<float>> smoothedValues;
     std::map<juce::String, std::atomic<float>*> smoothedParamSources;
 
-    // smoothedParamIDs minus Mix and Balance (those two are consumed
-    // per-sample in processBlock instead). Built once in the constructor so
-    // the audio thread never constructs a juce::String from a C-string
-    // literal to compare IDs -- that allocates on the heap.
+    // smoothedParamIDs minus Mix, Time and Balance (those three are
+    // consumed per-sample in processBlock instead). Built once in the
+    // constructor so the audio thread never constructs a juce::String from
+    // a C-string literal to compare IDs -- that allocates on the heap.
     std::vector<juce::String> blockWiseSmoothedParamIDs;
 
     // Cached directly from smoothedValues in prepareToPlay, so processBlock
@@ -66,8 +66,13 @@ private:
     juce::SmoothedValue<float>* mixSmoothed = nullptr;
     juce::SmoothedValue<float>* balanceSmoothed = nullptr;
 
+    // Time is consumed per-sample too: the active grain length must track
+    // it smoothly at audio rate, not jump once per block, or a continuous
+    // sweep clicks at every block boundary.
+    juce::SmoothedValue<float>* timeSmoothed = nullptr;
+
     ReverseModeC::ReverseBuffer reverseBuffer;
-    std::atomic<float>* bufferLengthParam = nullptr;
+    std::atomic<float>* timeParam = nullptr;
     std::atomic<float>* mixParam = nullptr;
     std::atomic<float>* balanceParam = nullptr;
 

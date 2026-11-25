@@ -48,13 +48,14 @@ TEST_CASE("The six continuous knobs exist with their documented ranges and defau
     }
 }
 
-TEST_CASE("Buffer Length is a discrete 1s/2s/4s choice, defaulting to 2s", "[parameters]")
+TEST_CASE("Time is a continuous parameter from 0.1s to 4s, defaulting to 2s", "[parameters]")
 {
     ReverseModeCAudioProcessor processor;
 
-    const auto& param = requireParam<juce::AudioParameterChoice>(processor.apvts, ReverseModeC::ParamIDs::bufferLength);
-    CHECK(param.choices == ReverseModeC::bufferLengthChoices);
-    CHECK(param.getIndex() == 1);
+    const auto& param = requireParam<juce::AudioParameterFloat>(processor.apvts, ReverseModeC::ParamIDs::time);
+    CHECK_THAT((double) param.range.start, WithinAbs(0.1, 1.0e-6));
+    CHECK_THAT((double) param.range.end, WithinAbs(4.0, 1.0e-6));
+    CHECK_THAT((double) param.get(), WithinAbs(2.0, 1.0e-6));
 }
 
 TEST_CASE("Mod Sync/Free and Bypass are boolean toggles, both off by default", "[parameters]")

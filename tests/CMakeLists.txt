@@ -4,7 +4,7 @@ add_executable(reverse_mode_c_tests
     SmoothingTest.cpp
     ReverseBufferTest.cpp
     BlendTest.cpp
-    BufferLengthTest.cpp
+    TimeControlTest.cpp
     ${CMAKE_SOURCE_DIR}/Source/Parameters.cpp
     ${CMAKE_SOURCE_DIR}/Source/ReverseBuffer.cpp
     ${CMAKE_SOURCE_DIR}/Source/PluginProcessor.cpp

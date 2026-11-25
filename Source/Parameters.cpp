@@ -20,8 +20,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID { ParamIDs::modRate, 1 }, "Mod Rate", juce::NormalisableRange<float>(0.1f, 10.0f), 2.0f));
 
-    params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID { ParamIDs::bufferLength, 1 }, "Buffer Length", bufferLengthChoices, 1));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID { ParamIDs::time, 1 }, "Time", juce::NormalisableRange<float>(0.1f, 4.0f), 2.0f));
 
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { ParamIDs::modSync, 1 }, "Mod Sync", false));
