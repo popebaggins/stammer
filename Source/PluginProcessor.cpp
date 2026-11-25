@@ -99,12 +99,12 @@ void ReverseModeCAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, 
         const auto forwardL = left[i];
         const auto forwardR = right[i];
 
-        float reverseL, reverseR;
-        reverseBuffer.processSample(forwardL, forwardR, reverseL, reverseR);
+        float reverseL, reverseR, octaveUpL, octaveUpR;
+        reverseBuffer.processSample(forwardL, forwardR, reverseL, reverseR, &octaveUpL, &octaveUpR);
 
         const auto balance = balanceSmoothed->getNextValue();
-        const auto wetL = ReverseModeC::blendBalance(forwardL, reverseL, balance);
-        const auto wetR = ReverseModeC::blendBalance(forwardR, reverseR, balance);
+        const auto wetL = ReverseModeC::blendBalance(forwardL, reverseL, octaveUpL, balance);
+        const auto wetR = ReverseModeC::blendBalance(forwardR, reverseR, octaveUpR, balance);
 
         const auto mix = mixSmoothed->getNextValue();
         const auto gain = bypassGain.getNextValue();
