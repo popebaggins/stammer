@@ -30,7 +30,13 @@ public:
     // Writes one input sample into the circular buffer and produces the
     // corresponding time-reversed granular output sample. Call exactly once
     // per sample, in order; audio-thread safe (no allocation, no locks).
-    void processSample(float inLeft, float inRight, float& outLeft, float& outRight);
+    //
+    // When octaveUpLeft/octaveUpRight are non-null, also produces the +1
+    // octave voice: the same grain/window timing (ageA/ageB and window
+    // weights), but stepping through recorded history at 2x the rate, which
+    // pitches the readback up one octave.
+    void processSample(float inLeft, float inRight, float& outLeft, float& outRight,
+                        float* octaveUpLeft = nullptr, float* octaveUpRight = nullptr);
 
 private:
     std::vector<float> left, right;
@@ -44,7 +50,7 @@ private:
     long long triggerPosA = 0;
     long long triggerPosB = 0;
 
-    void readGrain(long long triggerPos, int age, float& outLeft, float& outRight) const;
+    void readGrain(long long triggerPos, int age, int rate, float& outLeft, float& outRight) const;
 };
 
 } // namespace ReverseModeC

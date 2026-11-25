@@ -32,15 +32,16 @@ void ReverseBuffer::setGrainLengthSeconds(double seconds)
     phase %= grainLengthSamples;
 }
 
-void ReverseBuffer::readGrain(long long triggerPos, int age, float& outLeft, float& outRight) const
+void ReverseBuffer::readGrain(long long triggerPos, int age, int rate, float& outLeft, float& outRight) const
 {
-    auto rawIndex = triggerPos - 1 - (long long) age;
+    auto rawIndex = triggerPos - 1 - (long long) age * (long long) rate;
     auto idx = (int) (((rawIndex % capacitySamples) + capacitySamples) % capacitySamples);
     outLeft = left[(size_t) idx];
     outRight = right[(size_t) idx];
 }
 
-void ReverseBuffer::processSample(float inLeft, float inRight, float& outLeft, float& outRight)
+void ReverseBuffer::processSample(float inLeft, float inRight, float& outLeft, float& outRight,
+                                   float* octaveUpLeft, float* octaveUpRight)
 {
     left[(size_t) writeIndex] = inLeft;
     right[(size_t) writeIndex] = inRight;
@@ -63,11 +64,21 @@ void ReverseBuffer::processSample(float inLeft, float inRight, float& outLeft, f
     const auto windowB = 1.0f - windowA;
 
     float grainAL, grainAR, grainBL, grainBR;
-    readGrain(triggerPosA, ageA, grainAL, grainAR);
-    readGrain(triggerPosB, ageB, grainBL, grainBR);
+    readGrain(triggerPosA, ageA, 1, grainAL, grainAR);
+    readGrain(triggerPosB, ageB, 1, grainBL, grainBR);
 
     outLeft = windowA * grainAL + windowB * grainBL;
     outRight = windowA * grainAR + windowB * grainBR;
+
+    if (octaveUpLeft != nullptr && octaveUpRight != nullptr)
+    {
+        float octAL, octAR, octBL, octBR;
+        readGrain(triggerPosA, ageA, 2, octAL, octAR);
+        readGrain(triggerPosB, ageB, 2, octBL, octBR);
+
+        *octaveUpLeft = windowA * octAL + windowB * octBL;
+        *octaveUpRight = windowA * octAR + windowB * octBR;
+    }
 
     phase = (phase + 1) % grainLengthSamples;
 }

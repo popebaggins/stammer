@@ -139,14 +139,18 @@ TEST_CASE("Balance at full Forward reproduces the dry input exactly, even once t
         }
 }
 
-TEST_CASE("Balance at full Reverse produces audibly different, reversed audio instead of the dry input", "[processBlock]")
+TEST_CASE("Balance at centre (pure Reverse) produces audibly different, reversed audio instead of the dry input",
+          "[processBlock]")
 {
+    // Ticket 03 moved pure Reverse from Balance == +1 (the old 2-way
+    // convention) to Balance == 0 (the centre of the new 3-way
+    // Forward/Reverse/Octave-up crossfade).
     ReverseModeCAudioProcessor processor;
     processor.prepareToPlay(sampleRate, blockSize);
     juce::MidiBuffer midi;
 
     *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::mix) = 1.0f;
-    *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::balance) = 1.0f;
+    *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::balance) = 0.0f;
 
     // Prime the reverse buffer with a non-constant (ramp) signal so a
     // correctly-wired Reverse voice has real, distinguishable history to
@@ -171,4 +175,105 @@ TEST_CASE("Balance at full Reverse produces audibly different, reversed audio in
             }
 
     CHECK(anySampleDiffers);
+}
+
+namespace
+{
+// A low sample rate so the "1s" Buffer Length preset (set explicitly below)
+// resolves to a short, fast-to-fill 1000-sample grain. At the default 44.1kHz
+// a grain is tens of thousands of samples, far longer than a few blocks of
+// warmup can fill with real signal -- both the Reverse voice (reads back up
+// to one grain) and especially the Octave-up voice (reads back up to two
+// grains, at 2x rate) would still be reading mostly pre-roll silence rather
+// than real history, making them look identical for the wrong reason.
+constexpr double octaveTestSampleRate = 1000.0;
+
+// Runs an identically-primed processor to full Mix/Balance settling and
+// returns its output for one more block of ramp input. Feeding every
+// instance the exact same input sequence makes their internal Reverse and
+// Octave-up buffer state bit-identical (that state depends only on the
+// input samples written, never on Balance/Mix), so outputs captured this
+// way at different fixed Balance values are valid ground truth for each
+// voice in isolation -- not values hand-derived from the blend formula.
+juce::AudioBuffer<float> capturedOutputAtBalance(float balance)
+{
+    ReverseModeCAudioProcessor processor;
+    processor.prepareToPlay(octaveTestSampleRate, blockSize);
+    juce::MidiBuffer midi;
+
+    *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::bufferLength) = 0.0f; // "1s" -> 1000-sample grain
+    *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::mix) = 1.0f;
+    *processor.apvts.getRawParameterValue(ReverseModeC::ParamIDs::balance) = balance;
+
+    // 6 blocks (3072 samples) of real history: comfortably more than the
+    // 2000-sample deepest lookback the Octave-up voice needs (2x the
+    // 1000-sample grain), and comfortably inside the 4000-sample buffer
+    // capacity at this sample rate, so no wraparound complicates the result.
+    for (int i = 0; i < 6; ++i)
+    {
+        auto warmup = rampBuffer(2, blockSize);
+        processor.processBlock(warmup, midi);
+    }
+
+    auto buffer = rampBuffer(2, blockSize);
+    processor.processBlock(buffer, midi);
+    return buffer;
+}
+}
+
+TEST_CASE("Balance at full Octave-up produces audio distinct from the Reverse voice, not an identical copy of it",
+          "[processBlock]")
+{
+    // Catches an identity bug where the "octave-up" voice is wired up but
+    // accidentally reads at the same 1x rate as Reverse (e.g. the rate
+    // multiplier never reaches the reader), which would make this voice
+    // indistinguishable from plain Reverse instead of a separate, audibly
+    // pitched-up one.
+    const auto reverseOnly = capturedOutputAtBalance(0.0f);
+    const auto octaveUpOnly = capturedOutputAtBalance(1.0f);
+
+    bool anySampleDiffers = false;
+    for (int ch = 0; ch < reverseOnly.getNumChannels() && !anySampleDiffers; ++ch)
+        for (int i = 0; i < reverseOnly.getNumSamples(); ++i)
+            if (std::abs(reverseOnly.getSample(ch, i) - octaveUpOnly.getSample(ch, i)) > 1.0e-4f)
+            {
+                anySampleDiffers = true;
+                break;
+            }
+
+    CHECK(anySampleDiffers);
+}
+
+TEST_CASE("Sweeping Balance from -1 through 0 to +1 smoothly blends Forward, Reverse, and Octave-up in turn",
+          "[processBlock]")
+{
+    const auto forwardOnly = capturedOutputAtBalance(-1.0f);
+    const auto reverseOnly = capturedOutputAtBalance(0.0f);
+    const auto octaveUpOnly = capturedOutputAtBalance(1.0f);
+    const auto forwardReverseBlend = capturedOutputAtBalance(-0.5f);
+    const auto reverseOctaveUpBlend = capturedOutputAtBalance(0.5f);
+
+    const auto rampInput = rampBuffer(2, blockSize);
+
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < blockSize; ++i)
+        {
+            INFO("channel " << ch << " sample " << i);
+
+            // Balance == -1 is Forward alone: exactly the dry input.
+            CHECK_THAT((double) forwardOnly.getSample(ch, i), WithinAbs((double) rampInput.getSample(ch, i), 1.0e-4));
+
+            // Balance == -0.5 is the midpoint of the Forward<->Reverse half,
+            // which the blend's own linear-interpolation definition puts at
+            // the arithmetic mean of the two pure-voice references measured
+            // above -- independent ground truth, not the blend code itself.
+            const auto expectedForwardReverse = 0.5 * (double) forwardOnly.getSample(ch, i)
+                                               + 0.5 * (double) reverseOnly.getSample(ch, i);
+            CHECK_THAT((double) forwardReverseBlend.getSample(ch, i), WithinAbs(expectedForwardReverse, 1.0e-4));
+
+            // Balance == +0.5 is the midpoint of the Reverse<->Octave-up half.
+            const auto expectedReverseOctaveUp = 0.5 * (double) reverseOnly.getSample(ch, i)
+                                                + 0.5 * (double) octaveUpOnly.getSample(ch, i);
+            CHECK_THAT((double) reverseOctaveUpBlend.getSample(ch, i), WithinAbs(expectedReverseOctaveUp, 1.0e-4));
+        }
 }
