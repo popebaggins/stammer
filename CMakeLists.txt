@@ -37,6 +37,7 @@ target_sources(ReverseModeC
     PRIVATE
         Source/Parameters.cpp
         Source/ReverseBuffer.cpp
+        Source/MorphingFilter.cpp
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
         Source/PluginMain.cpp)
@@ -50,6 +51,7 @@ target_compile_definitions(ReverseModeC
 target_link_libraries(ReverseModeC
     PRIVATE
         juce::juce_audio_utils
+        juce::juce_dsp
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MorphingFilter.h"
 #include "Parameters.h"
 #include "ReverseBuffer.h"
 
@@ -53,10 +54,10 @@ private:
     std::map<juce::String, juce::SmoothedValue<float>> smoothedValues;
     std::map<juce::String, std::atomic<float>*> smoothedParamSources;
 
-    // smoothedParamIDs minus Mix, Time and Balance (those three are
-    // consumed per-sample in processBlock instead). Built once in the
-    // constructor so the audio thread never constructs a juce::String from
-    // a C-string literal to compare IDs -- that allocates on the heap.
+    // smoothedParamIDs minus Mix, Time, Balance, Feedback and Filter (those
+    // five are consumed per-sample in processBlock instead). Built once in
+    // the constructor so the audio thread never constructs a juce::String
+    // from a C-string literal to compare IDs -- that allocates on the heap.
     std::vector<juce::String> blockWiseSmoothedParamIDs;
 
     // Cached directly from smoothedValues in prepareToPlay, so processBlock
@@ -71,10 +72,32 @@ private:
     // sweep clicks at every block boundary.
     juce::SmoothedValue<float>* timeSmoothed = nullptr;
 
+    // Feedback is consumed per-sample: it scales the saturated recirculation
+    // added to the buffer write on every sample, so a block-rate jump would
+    // step the regenerated signal once per block instead of ramping it.
+    juce::SmoothedValue<float>* feedbackSmoothed = nullptr;
+
+    // Filter morphs per-sample too, for the same reason: a block-rate jump
+    // would step the cutoff once per block instead of sweeping it smoothly.
+    juce::SmoothedValue<float>* filterSmoothed = nullptr;
+
     ReverseModeC::ReverseBuffer reverseBuffer;
+    ReverseModeC::MorphingFilter morphingFilter;
     std::atomic<float>* timeParam = nullptr;
     std::atomic<float>* mixParam = nullptr;
     std::atomic<float>* balanceParam = nullptr;
+    std::atomic<float>* feedbackParam = nullptr;
+    std::atomic<float>* filterParam = nullptr;
+
+    // The reverse voice's own output from the previous sample, saturated
+    // and fed back into this sample's buffer write. Deliberately the raw
+    // Reverse voice, not the Balance/Mix-blended monitor signal: keeping the
+    // feedback path independent of Balance and Mix preserves the existing
+    // invariant (see ProcessBlockTest.cpp) that the reverse buffer's
+    // recorded content depends only on the input written, not on how the
+    // user is currently monitoring it.
+    float feedbackHistoryLeft = 0.0f;
+    float feedbackHistoryRight = 0.0f;
 
     // Bypass is a smoothed gain (1 = normal, 0 = bypassed) applied after the
     // blended wet/dry signal, rather than a hard switch, to avoid clicks.

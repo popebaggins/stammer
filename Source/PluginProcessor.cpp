@@ -13,12 +13,15 @@ ReverseModeCAudioProcessor::ReverseModeCAudioProcessor()
     timeParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::time);
     mixParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::mix);
     balanceParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::balance);
+    feedbackParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::feedback);
+    filterParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::filter);
 
     for (const auto& id : ReverseModeC::smoothedParamIDs)
     {
         smoothedParamSources[id] = apvts.getRawParameterValue(id);
         if (id != ReverseModeC::ParamIDs::mix && id != ReverseModeC::ParamIDs::balance
-            && id != ReverseModeC::ParamIDs::time)
+            && id != ReverseModeC::ParamIDs::time && id != ReverseModeC::ParamIDs::feedback
+            && id != ReverseModeC::ParamIDs::filter)
             blockWiseSmoothedParamIDs.push_back(id);
     }
 }
@@ -37,10 +40,16 @@ void ReverseModeCAudioProcessor::prepareToPlay(double sampleRate, int)
 
     reverseBuffer.prepare(sampleRate);
     reverseBuffer.setGrainLengthSeconds(*timeParam);
+    morphingFilter.prepare(sampleRate, 2);
 
     mixSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::mix);
     balanceSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::balance);
     timeSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::time);
+    feedbackSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::feedback);
+    filterSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::filter);
+
+    feedbackHistoryLeft = 0.0f;
+    feedbackHistoryRight = 0.0f;
 }
 
 float ReverseModeCAudioProcessor::getSmoothedParameterValue(const juce::String& paramID) const
@@ -67,6 +76,8 @@ void ReverseModeCAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, 
     mixSmoothed->setTargetValue(*mixParam);
     balanceSmoothed->setTargetValue(*balanceParam);
     timeSmoothed->setTargetValue(*timeParam);
+    feedbackSmoothed->setTargetValue(*feedbackParam);
+    filterSmoothed->setTargetValue(*filterParam);
 
     // The remaining smoothed params have no per-sample DSP consuming them
     // yet, so advance each of those once per block rather than
@@ -89,18 +100,29 @@ void ReverseModeCAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, 
 
         reverseBuffer.setGrainLengthSeconds(timeSmoothed->getNextValue());
 
+        const auto feedback = feedbackSmoothed->getNextValue();
+        const auto writeInputL = forwardL + std::tanh(feedback * feedbackHistoryLeft);
+        const auto writeInputR = forwardR + std::tanh(feedback * feedbackHistoryRight);
+
         float reverseL, reverseR, octaveUpL, octaveUpR;
-        reverseBuffer.processSample(forwardL, forwardR, reverseL, reverseR, &octaveUpL, &octaveUpR);
+        reverseBuffer.processSample(writeInputL, writeInputR, reverseL, reverseR, &octaveUpL, &octaveUpR);
+
+        feedbackHistoryLeft = reverseL;
+        feedbackHistoryRight = reverseR;
 
         const auto balance = balanceSmoothed->getNextValue();
         const auto wetL = ReverseModeC::blendBalance(forwardL, reverseL, octaveUpL, balance);
         const auto wetR = ReverseModeC::blendBalance(forwardR, reverseR, octaveUpR, balance);
 
+        const auto filterMorph = filterSmoothed->getNextValue();
+        const auto filteredWetL = morphingFilter.processSample(0, wetL, filterMorph);
+        const auto filteredWetR = morphingFilter.processSample(1, wetR, filterMorph);
+
         const auto mix = mixSmoothed->getNextValue();
         const auto gain = bypassGain.getNextValue();
 
-        left[i] = ReverseModeC::blendMix(forwardL, wetL, mix) * gain;
-        right[i] = ReverseModeC::blendMix(forwardR, wetR, mix) * gain;
+        left[i] = ReverseModeC::blendMix(forwardL, filteredWetL, mix) * gain;
+        right[i] = ReverseModeC::blendMix(forwardR, filteredWetR, mix) * gain;
     }
 }
 

@@ -5,8 +5,10 @@ add_executable(reverse_mode_c_tests
     ReverseBufferTest.cpp
     BlendTest.cpp
     TimeControlTest.cpp
+    FeedbackFilterTest.cpp
     ${CMAKE_SOURCE_DIR}/Source/Parameters.cpp
     ${CMAKE_SOURCE_DIR}/Source/ReverseBuffer.cpp
+    ${CMAKE_SOURCE_DIR}/Source/MorphingFilter.cpp
     ${CMAKE_SOURCE_DIR}/Source/PluginProcessor.cpp
     ${CMAKE_SOURCE_DIR}/Source/PluginEditor.cpp)
 
@@ -24,6 +26,7 @@ target_link_libraries(reverse_mode_c_tests PRIVATE
     Catch2::Catch2WithMain
     juce::juce_audio_processors
     juce::juce_audio_utils
+    juce::juce_dsp
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 
