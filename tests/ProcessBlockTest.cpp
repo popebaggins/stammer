@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include "Blend.h"
 #include "Parameters.h"
 #include "PluginProcessor.h"
 
@@ -263,17 +264,34 @@ TEST_CASE("Sweeping Balance from -1 through 0 to +1 smoothly blends Forward, Rev
             // Balance == -1 is Forward alone: exactly the dry input.
             CHECK_THAT((double) forwardOnly.getSample(ch, i), WithinAbs((double) rampInput.getSample(ch, i), 1.0e-4));
 
-            // Balance == -0.5 is the midpoint of the Forward<->Reverse half,
-            // which the blend's own linear-interpolation definition puts at
-            // the arithmetic mean of the two pure-voice references measured
-            // above -- independent ground truth, not the blend code itself.
-            const auto expectedForwardReverse = 0.5 * (double) forwardOnly.getSample(ch, i)
-                                               + 0.5 * (double) reverseOnly.getSample(ch, i);
-            CHECK_THAT((double) forwardReverseBlend.getSample(ch, i), WithinAbs(expectedForwardReverse, 1.0e-4));
+            // Balance == -0.5 / +0.5 are checked against the production
+            // blendBalance curve applied to the three per-voice references
+            // measured above -- ground truth for voice wiring (are the
+            // right three signals reaching the blend at all?), independent
+            // of the curve's own shape (covered separately, by-ear tuning
+            // included, in BlendTest.cpp).
+            const auto expectedForwardReverse = ReverseModeC::blendBalance(forwardOnly.getSample(ch, i),
+                                                                            reverseOnly.getSample(ch, i),
+                                                                            octaveUpOnly.getSample(ch, i),
+                                                                            -0.5f);
+            CHECK_THAT((double) forwardReverseBlend.getSample(ch, i), WithinAbs((double) expectedForwardReverse, 1.0e-4));
 
-            // Balance == +0.5 is the midpoint of the Reverse<->Octave-up half.
-            const auto expectedReverseOctaveUp = 0.5 * (double) reverseOnly.getSample(ch, i)
-                                                + 0.5 * (double) octaveUpOnly.getSample(ch, i);
-            CHECK_THAT((double) reverseOctaveUpBlend.getSample(ch, i), WithinAbs(expectedReverseOctaveUp, 1.0e-4));
+            const auto expectedReverseOctaveUp = ReverseModeC::blendBalance(forwardOnly.getSample(ch, i),
+                                                                             reverseOnly.getSample(ch, i),
+                                                                             octaveUpOnly.getSample(ch, i),
+                                                                             0.5f);
+            CHECK_THAT((double) reverseOctaveUpBlend.getSample(ch, i), WithinAbs((double) expectedReverseOctaveUp, 1.0e-4));
         }
+}
+
+TEST_CASE("Balance curve tuning adds no processing latency", "[processBlock]")
+{
+    // The Balance curve is a pure per-sample function with no buffering of
+    // its own, so retuning it must never change the plugin's reported
+    // latency -- comfortably under the ticket's 10ms ceiling (which at
+    // 44.1kHz is ~441 samples).
+    ReverseModeCAudioProcessor processor;
+    processor.prepareToPlay(sampleRate, blockSize);
+
+    CHECK(processor.getLatencySamples() == 0);
 }
