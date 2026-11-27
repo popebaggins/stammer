@@ -27,16 +27,23 @@ TEST_CASE("Balance crossfades Forward / Reverse / Octave-up Reverse, weighted by
     // from both sides of the curve's branch point.
     CHECK_THAT((double) ReverseModeC::blendBalance(forward, reverse, octaveUp, 0.0f), WithinAbs(10.0, 1.0e-6));
 
-    // Midpoints of each half-range: an equal-power (sin/cos) crossfade,
-    // not a linear one -- ticket 06 replaces ticket 03's linear curve
+    // Midpoint of the left half: equal-power (sin/cos) crossfade, not a
+    // linear one -- ticket 06 replaces ticket 03's linear curve
     // specifically because it dips in level at this point. The expected
-    // values are the curve's own definition (sin/cos of pi/4), independent
-    // of the blendBalance implementation under test.
-    const auto midGain = std::sin(0.5f * halfPi); // sin(pi/4) == cos(pi/4), equal-power's own midpoint
-    const auto expectedForwardReverseMid = (double) forward * midGain + (double) reverse * midGain;
-    const auto expectedReverseOctaveUpMid = (double) reverse * midGain + (double) octaveUp * midGain;
+    // value is the curve's own documented definition (sin/cos of pi/4),
+    // independent of the blendBalance implementation under test.
+    const auto leftMidGain = std::sin(0.5f * halfPi); // sin(pi/4) == cos(pi/4)
+    const auto expectedForwardReverseMid = (double) forward * leftMidGain + (double) reverse * leftMidGain;
     CHECK_THAT((double) ReverseModeC::blendBalance(forward, reverse, octaveUp, -0.5f),
                WithinAbs(expectedForwardReverseMid, 1.0e-4));
+
+    // Midpoint of the right half: same equal-power mapping, but warped by
+    // the by-ear-tuned octaveUpSkew exponent first (Blend.h's documented
+    // formula), which is why this isn't simply the left half's mirror.
+    const auto rightWarped = std::pow(0.5f, ReverseModeC::octaveUpSkew);
+    const auto rightReverseGain = std::cos(rightWarped * halfPi);
+    const auto rightOctaveUpGain = std::sin(rightWarped * halfPi);
+    const auto expectedReverseOctaveUpMid = (double) reverse * rightReverseGain + (double) octaveUp * rightOctaveUpGain;
     CHECK_THAT((double) ReverseModeC::blendBalance(forward, reverse, octaveUp, 0.5f),
                WithinAbs(expectedReverseOctaveUpMid, 1.0e-4));
 }
