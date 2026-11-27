@@ -31,6 +31,7 @@ juce_add_plugin(ReverseModeC
     IS_MIDI_EFFECT FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     VST3_CATEGORIES "Fx"
+    NEEDS_WEB_BROWSER TRUE
     COPY_PLUGIN_AFTER_BUILD TRUE)
 
 target_sources(ReverseModeC
@@ -45,14 +46,59 @@ target_sources(ReverseModeC
 
 target_compile_definitions(ReverseModeC
     PUBLIC
-        JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0)
+
+# WebView UI (ticket 07): the React/TypeScript frontend under gui/ is built
+# by npm/esbuild and embedded as binary resources, served to the
+# juce::WebBrowserComponent by Source/PluginEditor.cpp's ResourceProvider.
+# See gui/README.md.
+find_program(NPM_EXECUTABLE npm)
+if(NOT NPM_EXECUTABLE)
+    message(FATAL_ERROR "npm not found: Node.js is required to build the WebView UI (see gui/README.md).")
+endif()
+
+set(REVERSE_MODE_C_GUI_DIR ${CMAKE_SOURCE_DIR}/gui)
+set(REVERSE_MODE_C_GUI_DIST ${REVERSE_MODE_C_GUI_DIR}/dist)
+set(REVERSE_MODE_C_GUI_INSTALL_STAMP ${REVERSE_MODE_C_GUI_DIR}/node_modules/.install-stamp)
+
+add_custom_command(
+    OUTPUT ${REVERSE_MODE_C_GUI_INSTALL_STAMP}
+    COMMAND ${NPM_EXECUTABLE} ci
+    COMMAND ${CMAKE_COMMAND} -E touch ${REVERSE_MODE_C_GUI_INSTALL_STAMP}
+    WORKING_DIRECTORY ${REVERSE_MODE_C_GUI_DIR}
+    DEPENDS ${REVERSE_MODE_C_GUI_DIR}/package.json ${REVERSE_MODE_C_GUI_DIR}/package-lock.json
+    COMMENT "Installing WebView UI npm dependencies (gui/)")
+
+add_custom_command(
+    OUTPUT ${REVERSE_MODE_C_GUI_DIST}/index.html ${REVERSE_MODE_C_GUI_DIST}/index.js ${REVERSE_MODE_C_GUI_DIST}/index.css
+    COMMAND ${NPM_EXECUTABLE} run build
+    WORKING_DIRECTORY ${REVERSE_MODE_C_GUI_DIR}
+    DEPENDS
+        ${REVERSE_MODE_C_GUI_INSTALL_STAMP}
+        ${REVERSE_MODE_C_GUI_DIR}/build.mjs
+        ${REVERSE_MODE_C_GUI_DIR}/tsconfig.json
+        ${REVERSE_MODE_C_GUI_DIR}/public/index.html
+        ${REVERSE_MODE_C_GUI_DIR}/src/index.tsx
+        ${REVERSE_MODE_C_GUI_DIR}/src/App.tsx
+        ${REVERSE_MODE_C_GUI_DIR}/src/App.css
+        ${REVERSE_MODE_C_GUI_DIR}/src/index.css
+        ${REVERSE_MODE_C_GUI_DIR}/src/components/ParamSlider.tsx
+        ${REVERSE_MODE_C_GUI_DIR}/src/components/ParamToggle.tsx
+    COMMENT "Building WebView UI (gui/ React app -> gui/dist)")
+
+juce_add_binary_data(ReverseModeCGuiAssets
+    SOURCES
+        ${REVERSE_MODE_C_GUI_DIST}/index.html
+        ${REVERSE_MODE_C_GUI_DIST}/index.js
+        ${REVERSE_MODE_C_GUI_DIST}/index.css)
 
 target_link_libraries(ReverseModeC
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp
+        juce::juce_gui_extra
+        ReverseModeCGuiAssets
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags

@@ -7,6 +7,7 @@ add_executable(reverse_mode_c_tests
     TimeControlTest.cpp
     FeedbackFilterTest.cpp
     VibratoTest.cpp
+    WebViewEditorTest.cpp
     ${CMAKE_SOURCE_DIR}/Source/Parameters.cpp
     ${CMAKE_SOURCE_DIR}/Source/ReverseBuffer.cpp
     ${CMAKE_SOURCE_DIR}/Source/MorphingFilter.cpp
@@ -21,7 +22,7 @@ target_include_directories(reverse_mode_c_tests PRIVATE
 target_compile_definitions(reverse_mode_c_tests PRIVATE
     JUCE_STANDALONE_APPLICATION=1
     JucePlugin_Name="ReverseModeC"
-    JUCE_WEB_BROWSER=0
+    JUCE_WEB_BROWSER=1
     JUCE_USE_CURL=0)
 
 target_link_libraries(reverse_mode_c_tests PRIVATE
@@ -29,6 +30,9 @@ target_link_libraries(reverse_mode_c_tests PRIVATE
     juce::juce_audio_processors
     juce::juce_audio_utils
     juce::juce_dsp
+    juce::juce_gui_extra
+    juce::pkgconfig_JUCE_BROWSER_LINUX_DEPS
+    ReverseModeCGuiAssets
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 
