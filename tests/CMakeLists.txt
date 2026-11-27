@@ -6,9 +6,11 @@ add_executable(reverse_mode_c_tests
     BlendTest.cpp
     TimeControlTest.cpp
     FeedbackFilterTest.cpp
+    VibratoTest.cpp
     ${CMAKE_SOURCE_DIR}/Source/Parameters.cpp
     ${CMAKE_SOURCE_DIR}/Source/ReverseBuffer.cpp
     ${CMAKE_SOURCE_DIR}/Source/MorphingFilter.cpp
+    ${CMAKE_SOURCE_DIR}/Source/VibratoDelay.cpp
     ${CMAKE_SOURCE_DIR}/Source/PluginProcessor.cpp
     ${CMAKE_SOURCE_DIR}/Source/PluginEditor.cpp)
 

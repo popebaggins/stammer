@@ -15,13 +15,17 @@ ReverseModeCAudioProcessor::ReverseModeCAudioProcessor()
     balanceParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::balance);
     feedbackParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::feedback);
     filterParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::filter);
+    modDepthParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::modDepth);
+    modRateParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::modRate);
+    modSyncParam = apvts.getRawParameterValue(ReverseModeC::ParamIDs::modSync);
 
     for (const auto& id : ReverseModeC::smoothedParamIDs)
     {
         smoothedParamSources[id] = apvts.getRawParameterValue(id);
         if (id != ReverseModeC::ParamIDs::mix && id != ReverseModeC::ParamIDs::balance
             && id != ReverseModeC::ParamIDs::time && id != ReverseModeC::ParamIDs::feedback
-            && id != ReverseModeC::ParamIDs::filter)
+            && id != ReverseModeC::ParamIDs::filter && id != ReverseModeC::ParamIDs::modDepth
+            && id != ReverseModeC::ParamIDs::modRate)
             blockWiseSmoothedParamIDs.push_back(id);
     }
 }
@@ -41,12 +45,15 @@ void ReverseModeCAudioProcessor::prepareToPlay(double sampleRate, int)
     reverseBuffer.prepare(sampleRate);
     reverseBuffer.setGrainLengthSeconds(*timeParam);
     morphingFilter.prepare(sampleRate, 2);
+    vibratoDelay.prepare(sampleRate, 2);
 
     mixSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::mix);
     balanceSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::balance);
     timeSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::time);
     feedbackSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::feedback);
     filterSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::filter);
+    modDepthSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::modDepth);
+    modRateSmoothed = &smoothedValues.at(ReverseModeC::ParamIDs::modRate);
 
     feedbackHistoryLeft = 0.0f;
     feedbackHistoryRight = 0.0f;
@@ -78,6 +85,19 @@ void ReverseModeCAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, 
     timeSmoothed->setTargetValue(*timeParam);
     feedbackSmoothed->setTargetValue(*feedbackParam);
     filterSmoothed->setTargetValue(*filterParam);
+    modDepthSmoothed->setTargetValue(*modDepthParam);
+    modRateSmoothed->setTargetValue(*modRateParam);
+
+    // Host tempo, read once per block (it doesn't change at audio rate).
+    // Falls back to 120 BPM when no host playhead is attached, or it
+    // doesn't report a tempo, so Mod Sync always has something to lock to.
+    double bpm = 120.0;
+    if (auto* currentPlayHead = getPlayHead())
+        if (auto position = currentPlayHead->getPosition())
+            if (auto reportedBpm = position->getBpm())
+                bpm = *reportedBpm;
+    const auto beatsPerSecond = (float) (bpm / 60.0);
+    const auto modSyncEngaged = *modSyncParam > 0.5f;
 
     // The remaining smoothed params have no per-sample DSP consuming them
     // yet, so advance each of those once per block rather than
@@ -119,10 +139,24 @@ void ReverseModeCAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, 
         const auto filteredWetR = morphingFilter.processSample(1, wetR, filterMorph);
 
         const auto mix = mixSmoothed->getNextValue();
+        const auto mixedL = ReverseModeC::blendMix(forwardL, filteredWetL, mix);
+        const auto mixedR = ReverseModeC::blendMix(forwardR, filteredWetR, mix);
+
+        // Post-mix vibrato: a separate short delay line, modulated by a
+        // sine LFO, applied after Balance and Mix have already blended the
+        // voices. Mod Sync ties the LFO's speed to the host tempo (Mod
+        // Rate becomes "LFO cycles per beat") instead of a free Hz value.
+        const auto modDepth = modDepthSmoothed->getNextValue();
+        const auto modRateValue = modRateSmoothed->getNextValue();
+        const auto lfoRateHz = modSyncEngaged ? beatsPerSecond * modRateValue : modRateValue;
+        const auto lfoValue = vibratoDelay.advance(lfoRateHz);
+        const auto vibratoL = vibratoDelay.processSample(0, mixedL, lfoValue, modDepth);
+        const auto vibratoR = vibratoDelay.processSample(1, mixedR, lfoValue, modDepth);
+
         const auto gain = bypassGain.getNextValue();
 
-        left[i] = ReverseModeC::blendMix(forwardL, filteredWetL, mix) * gain;
-        right[i] = ReverseModeC::blendMix(forwardR, filteredWetR, mix) * gain;
+        left[i] = vibratoL * gain;
+        right[i] = vibratoR * gain;
     }
 }
 

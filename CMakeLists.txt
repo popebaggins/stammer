@@ -38,6 +38,7 @@ target_sources(ReverseModeC
         Source/Parameters.cpp
         Source/ReverseBuffer.cpp
         Source/MorphingFilter.cpp
+        Source/VibratoDelay.cpp
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
         Source/PluginMain.cpp)

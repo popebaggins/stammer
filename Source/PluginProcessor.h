@@ -3,6 +3,7 @@
 #include "MorphingFilter.h"
 #include "Parameters.h"
 #include "ReverseBuffer.h"
+#include "VibratoDelay.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -54,10 +55,11 @@ private:
     std::map<juce::String, juce::SmoothedValue<float>> smoothedValues;
     std::map<juce::String, std::atomic<float>*> smoothedParamSources;
 
-    // smoothedParamIDs minus Mix, Time, Balance, Feedback and Filter (those
-    // five are consumed per-sample in processBlock instead). Built once in
-    // the constructor so the audio thread never constructs a juce::String
-    // from a C-string literal to compare IDs -- that allocates on the heap.
+    // smoothedParamIDs minus Mix, Time, Balance, Feedback, Filter, Mod Depth
+    // and Mod Rate (those seven are consumed per-sample in processBlock
+    // instead). Built once in the constructor so the audio thread never
+    // constructs a juce::String from a C-string literal to compare IDs --
+    // that allocates on the heap.
     std::vector<juce::String> blockWiseSmoothedParamIDs;
 
     // Cached directly from smoothedValues in prepareToPlay, so processBlock
@@ -81,13 +83,27 @@ private:
     // would step the cutoff once per block instead of sweeping it smoothly.
     juce::SmoothedValue<float>* filterSmoothed = nullptr;
 
+    // Mod Depth and Mod Rate drive the vibrato LFO at audio rate (its
+    // frequency and the delay excursion it modulates), so both are
+    // consumed per-sample too, for the same reason as Time/Feedback/Filter.
+    juce::SmoothedValue<float>* modDepthSmoothed = nullptr;
+    juce::SmoothedValue<float>* modRateSmoothed = nullptr;
+
     ReverseModeC::ReverseBuffer reverseBuffer;
     ReverseModeC::MorphingFilter morphingFilter;
+    ReverseModeC::VibratoDelay vibratoDelay;
     std::atomic<float>* timeParam = nullptr;
     std::atomic<float>* mixParam = nullptr;
     std::atomic<float>* balanceParam = nullptr;
     std::atomic<float>* feedbackParam = nullptr;
     std::atomic<float>* filterParam = nullptr;
+    std::atomic<float>* modDepthParam = nullptr;
+    std::atomic<float>* modRateParam = nullptr;
+
+    // Mod Sync/Free is a boolean toggle (true = tempo-locked to the host,
+    // false = Free Hz), read directly rather than smoothed, matching how
+    // Bypass is read elsewhere in this class.
+    std::atomic<float>* modSyncParam = nullptr;
 
     // The reverse voice's own output from the previous sample, saturated
     // and fed back into this sample's buffer write. Deliberately the raw
