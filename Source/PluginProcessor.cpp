@@ -160,6 +160,19 @@ void ReverseModeCAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, 
     }
 }
 
+void ReverseModeCAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
+{
+    if (auto state = apvts.copyState(); auto xml = state.createXml())
+        copyXmlToBinary(*xml, destData);
+}
+
+void ReverseModeCAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
+{
+    if (auto xml = getXmlFromBinary(data, sizeInBytes))
+        if (xml->hasTagName(apvts.state.getType()))
+            apvts.replaceState(juce::ValueTree::fromXml(*xml));
+}
+
 juce::AudioProcessorEditor* ReverseModeCAudioProcessor::createEditor()
 {
     return new ReverseModeCAudioProcessorEditor(*this);

@@ -8,6 +8,7 @@ add_executable(reverse_mode_c_tests
     FeedbackFilterTest.cpp
     VibratoTest.cpp
     WebViewEditorTest.cpp
+    StateSaveRestoreTest.cpp
     ${CMAKE_SOURCE_DIR}/Source/Parameters.cpp
     ${CMAKE_SOURCE_DIR}/Source/ReverseBuffer.cpp
     ${CMAKE_SOURCE_DIR}/Source/MorphingFilter.cpp
