@@ -1,0 +1,23 @@
+{
+  "name": "reverse-mode-c-gui",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WebView UI for the Reverse Mode C VST3 plugin (ticket 07)",
+  "scripts": {
+    "dev": "node build.mjs --serve",
+    "build": "tsc --noEmit && node build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@juce-framework/webview": "^1.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.3"
+  }
+}
